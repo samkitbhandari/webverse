@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-ink-100 antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "tnum";
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-ink-700 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-ink-600;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-ink-700/70 bg-ink-900/70 backdrop-blur-sm;
+  }
+  .panel-header {
+    @apply flex items-center justify-between gap-2 border-b border-ink-700/70 px-4 py-2.5;
+  }
+  .panel-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-300;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]
+           font-medium uppercase tracking-wider;
+  }
+  .btn {
+    @apply inline-flex items-center gap-1.5 rounded-md border border-ink-600
+           bg-ink-800 px-2.5 py-1.5 text-xs font-medium text-ink-100
+           transition hover:border-ink-500 hover:bg-ink-700
+           disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply border-signal/40 bg-signal/15 text-signal hover:border-signal/70 hover:bg-signal/25;
+  }
+  .metric {
+    @apply font-mono tabular-nums;
+  }
+  .scroll-y {
+    @apply overflow-y-auto overscroll-contain;
+  }
+  .row-hover {
+    @apply transition-colors hover:bg-ink-800/60;
+  }
+}
+
+/* the force-graph canvas must never force page scroll */
+canvas {
+  display: block;
+}

@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# NEXUS Omega - core backend requirements
+#
+# Everything here installs in <60s and is enough to run the FULL pipeline.
+# Layout-aware document parsing (Docling) is deliberately kept OUT of this
+# file because it drags in torch/torchvision/transformers (~3 GB). The parsing
+# layer degrades gracefully: see backend/parsing/docling_parser.py.
+#   Optional, for layout-aware PDF/DOCX parsing:  pip install -r requirements-parsing.txt
+# ---------------------------------------------------------------------------
+
+# --- API / transport -------------------------------------------------------
+fastapi>=0.115
+uvicorn[standard]>=0.32
+websockets>=13.0
+python-multipart>=0.0.9
+
+# --- modelling / config ----------------------------------------------------
+pydantic>=2.9
+pydantic-settings>=2.5
+python-dotenv>=1.0
+PyYAML>=6.0
+
+# --- ingestion -------------------------------------------------------------
+watchdog>=5.0
+
+# --- knowledge storage -----------------------------------------------------
+kuzu>=0.6            # persistent property graph
+lancedb>=0.13        # embedded vector store
+numpy>=1.26
+
+# --- graph algorithms ------------------------------------------------------
+networkx>=3.3
+scipy>=1.13          # networkx pagerank/centrality backends
+
+# --- AI providers (both optional at runtime - see semantic/llm.py) ---------
+openai>=1.50
+anthropic>=0.39
+httpx>=0.27
+
+# --- lightweight document fallbacks (no torch) -----------------------------
+pypdfium2>=4.30
+python-docx>=1.1
