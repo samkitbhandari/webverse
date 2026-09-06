@@ -16,8 +16,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
+    # Every setting is namespaced NEXUS_* so nothing here can be hijacked by an
+    # unrelated variable already in the shell -- a bare PORT or HOST is common
+    # enough that reading it silently would be a nasty surprise. The three
+    # provider keys below opt out via explicit aliases, because OPENAI_API_KEY
+    # and ANTHROPIC_API_KEY are the names everyone already has set.
     model_config = SettingsConfigDict(
-        env_file=(ROOT / ".env"), env_file_encoding="utf-8", extra="ignore"
+        env_file=(ROOT / ".env"),
+        env_file_encoding="utf-8",
+        env_prefix="NEXUS_",
+        extra="ignore",
     )
 
     # --- filesystem ---------------------------------------------------------
