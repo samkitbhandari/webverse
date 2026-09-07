@@ -32,15 +32,45 @@ export function KnowledgeGraph({ data, selected, highlight, onSelect, className 
   const [size, setSize] = useState({ w: 0, h: 0 });
   const positions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
+  /**
+   * The canvas needs explicit pixel dimensions, so the container is measured.
+   *
+   * Measuring happens directly rather than *only* inside a ResizeObserver
+   * callback. Gating the first render on that callback means that anywhere it
+   * does not fire -- some embedded webviews, a container that is laid out
+   * before it is observed -- the graph stays permanently blank with no error
+   * to explain it. So the size is read synchronously on mount, and the
+   * observer is an enhancement for later resizes rather than a prerequisite
+   * for drawing anything at all.
+   */
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setSize({ w: Math.floor(width), h: Math.floor(height) });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect();
+      const w = Math.floor(width);
+      const h = Math.floor(height);
+      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+
+    measure();
+
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(measure);
+      ro.observe(el);
+    }
+    window.addEventListener("resize", measure);
+    // Fonts, scrollbars and the panel's own flex sizing can settle a frame or
+    // two after mount; one deferred re-measure catches that cheaply.
+    const settle = setTimeout(measure, 250);
+
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+      clearTimeout(settle);
+    };
   }, []);
 
   /**

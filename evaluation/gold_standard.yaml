@@ -1,0 +1,219 @@
+# Gold standard for NEXUS Omega.
+#
+# These labels are what a careful human reader says each document asserts.
+# They were written by reading the documents, NOT by recording what the system
+# currently extracts -- otherwise the evaluation would be circular and would
+# score 100% by construction while proving nothing.
+#
+# That means a label here may be something the system does not yet get right.
+# That is the point: the gaps are the finding.
+#
+# Value matching is semantic, not textual: "50000 units per month" and
+# "50,000 unit/month" are the same answer, because both normalise to the same
+# number and canonical unit.
+
+documents:
+  - path: backend/demo/corpus/01_programme_charter.md
+    assertions:
+      - subject: Fleet Deployment Phase 2
+        predicate: capacity
+        value: 240 vehicles
+        kind: claim
+      - subject: Fleet Deployment Phase 2
+        predicate: cost
+        value: 480 crore
+        operator: LTE
+        kind: constraint
+        note: stated as a programme budget ceiling
+      - subject: Fleet Deployment Phase 2
+        predicate: cost
+        value: 214 crore
+        kind: claim
+      - subject: Fleet Deployment Phase 2
+        predicate: scheduled revenue service
+        value: 9 months
+        kind: claim
+      - subject: Meridian Transit Authority
+        predicate: availability
+        value: 99 percent
+        operator: GTE
+        kind: constraint
+    entities: [Helios Urban Mobility Programme, Fleet Deployment Phase 2,
+               Meridian Transit Authority, Type Certification]
+    decisions: 1
+
+  - path: backend/demo/corpus/02_battery_thermal_specification.md
+    assertions:
+      - subject: Battery Pack BP-7
+        predicate: max operating temperature
+        value: 70 degC
+        operator: LTE
+        kind: constraint
+      - subject: Battery Pack BP-7
+        predicate: energy density
+        value: 178 Wh
+        kind: claim
+      - subject: Thermal Architecture A7
+        predicate: cost
+        value: 61000 INR
+        kind: claim
+      - subject: Battery Pack BP-7
+        predicate: max operating temperature
+        value: 68 degC
+        kind: observation
+      - subject: Thermal Architecture A7
+        predicate: ambient temperature
+        value: 38 degC
+        kind: claim
+        note: >-
+          Label corrected during evaluation. It originally read
+          "max operating temperature", which was a careless reading: the
+          document says the passive design depends on *ambient* temperature
+          staying below 38 degC. The system was right and the label was wrong.
+          Recorded here rather than quietly changed, because a gold set that
+          gets edited to match the output stops being evidence.
+    entities: [Battery Pack BP-7, Thermal Architecture A7, Fleet Deployment Phase 2]
+    decisions: 1
+
+  - path: backend/demo/corpus/03_supplier_agreement.md
+    assertions:
+      - subject: Volta Cells Ltd
+        predicate: capacity
+        value: 50000 units per month
+        kind: claim
+      - subject: Volta Cells Ltd
+        predicate: lead time
+        value: 14 days
+        kind: claim
+      - subject: Volta Cells Ltd
+        predicate: cost
+        value: 3120 INR
+        kind: claim
+      - subject: Kirin Energy Systems
+        predicate: capacity
+        value: 34000 units per month
+        kind: claim
+      - subject: Kirin Energy Systems
+        predicate: lead time
+        value: 31 days
+        kind: claim
+      - subject: Kirin Energy Systems
+        predicate: cost
+        value: 2740 INR
+        kind: claim
+      - subject: Kirin Energy Systems
+        predicate: max operating temperature
+        value: 60 degC
+        operator: LTE
+        kind: claim
+    entities: [Volta Cells Ltd, Kirin Energy Systems, Battery Pack BP-7]
+    decisions: 1
+
+  - path: backend/demo/corpus/04_fleet_operations_report.md
+    assertions:
+      - subject: Fleet Deployment Phase 2
+        predicate: availability
+        value: 99.3 percent
+        kind: observation
+        note: "'measured fleet availability' - the fleet under discussion"
+      - subject: Whitefield Corridor
+        predicate: utilisation
+        value: 71 percent
+        kind: claim
+      - subject: Fleet Deployment Phase 2
+        predicate: range
+        value: 214 km
+        kind: observation
+      - subject: Fleet Deployment Phase 2
+        predicate: charging time
+        value: 47 minutes
+        kind: observation
+      - subject: Battery Pack BP-7
+        predicate: max operating temperature
+        value: 66 degC
+        kind: observation
+      - subject: Whitefield Corridor
+        predicate: ambient temperature
+        value: 41 degC
+        kind: observation
+        note: >-
+          A known weak spot, labelled deliberately. The sentence names no
+          entity, so attribution falls back to the previous subject and the
+          reading lands on the battery instead of the corridor. Measuring it
+          keeps the gap visible instead of letting it hide.
+      - subject: Fleet Deployment Phase 1
+        predicate: fleet size
+        value: 96 vehicles
+        kind: claim
+      - subject: Charging Hub North
+        predicate: charging power
+        value: 180 kW
+        kind: claim
+    entities: [Whitefield Corridor, Fleet Deployment Phase 1,
+               Fleet Deployment Phase 2, Charging Hub North]
+    decisions: 0
+
+  - path: backend/demo/corpus/05_certification_plan.md
+    assertions:
+      - subject: Type Certification
+        predicate: certification submission scheduled
+        value: 4 months
+        kind: claim
+      - subject: Type Certification
+        predicate: lead time
+        value: 45 days
+        kind: claim
+      - subject: Type Certification
+        predicate: cost
+        value: 34 lakh
+        kind: claim
+    entities: [Type Certification, UNECE R100, Battery Pack BP-7,
+               Thermal Architecture A7, Fleet Deployment Phase 2]
+    decisions: 1
+
+  - path: backend/demo/changes/06_regulation_update.md
+    assertions:
+      - subject: Battery Pack BP-7
+        predicate: max operating temperature
+        value: 60 degC
+        operator: LTE
+        kind: constraint
+    entities: [UNECE R100, Battery Pack BP-7, Type Certification,
+               Thermal Architecture A7]
+    decisions: 0
+
+# ---------------------------------------------------------------------------
+# The reasoning tasks. This is what separates the system from retrieval.
+# ---------------------------------------------------------------------------
+reasoning:
+  # After ingesting the regulation on top of the baseline corpus.
+  trigger: backend/demo/changes/06_regulation_update.md
+
+  expected_supersessions:
+    - subject: Battery Pack BP-7
+      predicate: max operating temperature
+      old_value: 70 degC
+      new_value: 60 degC
+      note: the regulation revision replaces the earlier limit
+
+  expected_contradictions:
+    - kind: CONSTRAINT
+      subject: Battery Pack BP-7
+      predicate: max operating temperature
+      note: the 68 degC chamber measurement violates the new 60 degC ceiling
+
+  # The question retrieval cannot answer. Decisions are matched on a
+  # distinctive substring of their text.
+  expected_affected_decisions:
+    - "submit Type Certification"
+    - "proceed with Fleet Deployment Phase 2"
+
+  # Things that must NOT be reported as affected -- guarding against an engine
+  # that simply marks everything downstream and calls it recall.
+  expected_unaffected_decisions:
+    - "selected Volta Cells Ltd"
+
+  # The natural-language question a compliance owner actually asks.
+  question: >-
+    UNECE R100 rev.3 lowers the battery operating limit from 70 degC to 60 degC.
+    Which of our decisions are no longer supported, and why?

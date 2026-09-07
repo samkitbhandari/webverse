@@ -1,6 +1,6 @@
 export type NodeType =
   | "Entity" | "Claim" | "Decision" | "Requirement" | "Constraint"
-  | "Assumption" | "Observation" | "Event" | "Risk" | "Action" | "Evidence";
+  | "Assumption" | "Observation" | "Event" | "Risk" | "Action" | "Evidence" | "Concept";
 
 export type EpistemicStatus =
   | "SUPPORTED" | "PROBABLE" | "UNCERTAIN" | "CONTESTED"

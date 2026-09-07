@@ -55,9 +55,22 @@ export default function OverviewPage() {
   );
 
   return (
-    <div className="grid h-full grid-cols-12 grid-rows-[minmax(0,1.35fr)_minmax(0,1fr)] gap-2 p-2">
+    // Three rows, declared explicitly. The graph spans rows 1-2; health and
+    // activity stack beside it; contradictions and validation share row 3.
+    // Declaring only two rows let the last pair fall into an implicit auto row,
+    // which sizes to its content -- so a long contradictions list ate the
+    // height and collapsed the graph to a sliver.
+    //
+    // Every track is minmax(0, Nfr) so panels can shrink below their content
+    // and their own scroll containers take over. Below `lg` the fixed template
+    // is dropped and the page scrolls instead of cramming into one screen.
+    <div
+      className="grid h-full grid-cols-12 gap-2 overflow-y-auto p-2
+                 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]
+                 lg:overflow-hidden"
+    >
       <Panel
-        className="col-span-12 row-span-2 lg:col-span-8"
+        className="col-span-12 row-span-2 min-h-[420px] lg:col-span-8 lg:min-h-0"
         title={
           <span className="flex items-center gap-2">
             Living knowledge graph
@@ -91,7 +104,7 @@ export default function OverviewPage() {
       </Panel>
 
       <Panel
-        className="col-span-12 lg:col-span-4"
+        className="col-span-12 min-h-[260px] lg:col-span-4 lg:min-h-0"
         title="Knowledge health"
         actions={
           <a href="/entities" className="text-[11px] text-ink-400 hover:text-signal">
@@ -104,7 +117,7 @@ export default function OverviewPage() {
       </Panel>
 
       <Panel
-        className="col-span-12 lg:col-span-4"
+        className="col-span-12 min-h-[260px] lg:col-span-4 lg:min-h-0"
         title={
           <span className="flex items-center gap-1.5">
             <Activity size={12} /> Live activity
@@ -118,7 +131,7 @@ export default function OverviewPage() {
       </Panel>
 
       <Panel
-        className="col-span-12 lg:col-span-4"
+        className="col-span-12 min-h-[260px] lg:col-span-4 lg:min-h-0"
         title={`Contradictions (${contradictions.data?.count ?? 0})`}
       >
         {contradictions.error && <ErrorNote message={contradictions.error} />}
@@ -130,7 +143,7 @@ export default function OverviewPage() {
       </Panel>
 
       <Panel
-        className="col-span-12 lg:col-span-4"
+        className="col-span-12 min-h-[260px] lg:col-span-4 lg:min-h-0"
         title="What to validate next"
         actions={
           validation.data && (

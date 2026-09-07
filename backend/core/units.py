@@ -74,9 +74,19 @@ _TO_CANONICAL: dict[str, float] = {
     "wh": 1e-3, "kwh": 1.0, "mwh": 1e3,
 }
 
-_BOOL_TRUE = {"true", "yes", "supported", "enabled", "active", "compliant", "available"}
-_BOOL_FALSE = {"false", "no", "unsupported", "disabled", "inactive", "deprecated",
-               "non-compliant", "unavailable", "removed"}
+# Polarity words are normalised to booleans so that "certified" and
+# "decertified" are recognised as opposing values for the same property --
+# which is what makes a semantic contradiction detectable at all.
+_BOOL_TRUE = {
+    "true", "yes", "supported", "enabled", "active", "compliant", "available",
+    "certified", "approved", "operational", "valid", "in force",
+}
+_BOOL_FALSE = {
+    "false", "no", "unsupported", "disabled", "inactive", "deprecated",
+    "non-compliant", "noncompliant", "unavailable", "removed", "withdrawn",
+    "obsolete", "discontinued", "decertified", "revoked", "suspended",
+    "expired", "invalid",
+}
 
 _NUM_RE = re.compile(
     r"(?P<sign>[-+])?\s*(?P<num>\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?)"

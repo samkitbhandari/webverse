@@ -33,6 +33,10 @@ class NodeType(str, enum.Enum):
     RISK = "Risk"
     ACTION = "Action"
     EVIDENCE = "Evidence"
+    #: An emergent topic discovered by clustering embeddings, not asserted by
+    #: any source. Concepts are derived structure: they can be rebuilt from
+    #: scratch at any time and nothing should depend on a particular one.
+    CONCEPT = "Concept"
 
 
 class EdgeType(str, enum.Enum):
@@ -51,6 +55,7 @@ class EdgeType(str, enum.Enum):
     RELATED_TO = "RELATED_TO"
     BASED_ON = "BASED_ON"     # Decision -> Claim  (decision lineage)
     ABOUT = "ABOUT"           # Claim -> Entity
+    MEMBER_OF = "MEMBER_OF"   # Claim -> Concept   (embedding cluster membership)
 
 
 class EpistemicStatus(str, enum.Enum):
@@ -89,6 +94,11 @@ EDGE_INFLUENCE: dict[EdgeType, float] = {
     EdgeType.ABOUT: 0.35,
     EdgeType.OWNED_BY: 0.25,
     EdgeType.RELATED_TO: 0.20,
+    # Cluster membership is topical resemblance, not dependency. A concept
+    # touching twenty claims would otherwise become a superhighway through
+    # which every claim reaches every other, and impact analysis would
+    # degenerate into "everything affects everything". Kept deliberately low.
+    EdgeType.MEMBER_OF: 0.08,
 }
 
 #: Which way a change travels across a relationship.
@@ -117,6 +127,7 @@ EDGE_DIRECTION: dict[EdgeType, str] = {
     EdgeType.ABOUT: "both",
     EdgeType.OWNED_BY: "both",
     EdgeType.RELATED_TO: "both",
+    EdgeType.MEMBER_OF: "both",
 }
 
 #: Intrinsic weight of a node type when scoring criticality. A decision or a
@@ -133,6 +144,9 @@ NODE_CRITICALITY: dict[NodeType, float] = {
     NodeType.EVENT: 0.50,
     NodeType.OBSERVATION: 0.45,
     NodeType.EVIDENCE: 0.30,
+    # Derived, not asserted: a concept should never outrank the beliefs that
+    # produced it when the graph is ranked by criticality.
+    NodeType.CONCEPT: 0.25,
 }
 
 

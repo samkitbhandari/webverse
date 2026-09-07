@@ -29,6 +29,7 @@ PREFIXES: dict[NodeType, str] = {
     NodeType.RISK: "RK",
     NodeType.ACTION: "AC",
     NodeType.EVIDENCE: "E",
+    NodeType.CONCEPT: "CP",
 }
 
 _lock = threading.Lock()

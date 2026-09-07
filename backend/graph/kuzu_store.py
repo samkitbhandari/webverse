@@ -213,9 +213,20 @@ class KuzuStore:
                 self.conn.execute(_UPSERT_EDGE, edge_params(e))
 
     def delete_node(self, node_id: str) -> None:
+        """Remove a node and every relationship touching it.
+
+        Kuzu rejects DELETE on an undirected pattern ("Delete undirected rel is
+        not supported"), so incoming and outgoing edges are cleared separately.
+        Both must go before the node itself, or the delete fails on dangling
+        relationships.
+        """
         with self._lock:
             self.conn.execute(
-                "MATCH (a:KNode)-[r:KEdge]-(b:KNode) WHERE a.id = $id DELETE r",
+                "MATCH (a:KNode)-[r:KEdge]->(b:KNode) WHERE a.id = $id DELETE r",
+                {"id": node_id},
+            )
+            self.conn.execute(
+                "MATCH (a:KNode)-[r:KEdge]->(b:KNode) WHERE b.id = $id DELETE r",
                 {"id": node_id},
             )
             self.conn.execute("MATCH (n:KNode) WHERE n.id = $id DELETE n", {"id": node_id})

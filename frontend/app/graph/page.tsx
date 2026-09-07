@@ -15,7 +15,7 @@ import type { GraphPayload, ImpactReport, NodeDetail, NodeType, Timeline as TL }
 
 const ALL_TYPES: NodeType[] = [
   "Entity", "Claim", "Observation", "Assumption", "Decision",
-  "Requirement", "Constraint", "Event", "Risk", "Action", "Evidence",
+  "Requirement", "Constraint", "Event", "Risk", "Action", "Evidence", "Concept",
 ];
 
 function GraphExplorer() {

@@ -156,6 +156,60 @@ def test_removing_a_source_weakens_rather_than_deletes(pipeline, inbox, store):
     assert after.status is EpistemicStatus.UNVERIFIED
 
 
+def test_forgetting_a_node_erases_it_everywhere(pipeline, inbox, store, index):
+    """Retiring weakens; forgetting removes. This is the destructive one."""
+    pipeline.ingest_file(write(inbox, "spec.md", SPEC))
+    claim = store.of_type(NodeType.CLAIM)[0]
+    edges = len(store.incident(claim.id))
+
+    result = pipeline.forget_node(claim.id)
+    assert result["removed"] and result["edges_removed"] == edges
+    assert store.get(claim.id) is None
+    # gone from durable storage too, not just the working set
+    assert not store.query("MATCH (n:KNode) WHERE n.id = $id RETURN n.id",
+                           {"id": claim.id})
+    # and no dangling relationships were left behind
+    assert all(e.source != claim.id and e.target != claim.id
+               for e in store.edges.values())
+
+
+def test_forgetting_an_unknown_node_is_reported_not_raised(pipeline):
+    result = pipeline.forget_node("NOPE")
+    assert result["removed"] is False and "NOPE" in result["reason"]
+
+
+def test_purging_a_source_spares_corroborated_knowledge(pipeline, inbox, store):
+    """A claim two documents both assert must survive one of them being purged."""
+    a = write(inbox, "a.md", "# A\n\nVolta Cells Ltd capacity is 50000 units per month.\n")
+    b = write(inbox, "b.md", "# B\n\nVolta Cells Ltd capacity is 50000 units per month.\n")
+    pipeline.ingest_file(a)
+    pipeline.ingest_file(b)
+
+    claim = next(n for n in store.of_type(NodeType.CLAIM) if n.predicate == "capacity")
+    assert len({p.source_path for p in claim.provenance}) == 2, "should be corroborated"
+
+    result = pipeline.purge_source(str(a))
+    survivor = store.get(claim.id)
+    assert survivor is not None, "corroborated knowledge must not be purged"
+    assert claim.id in result["kept_with_other_evidence"]
+    assert {p.source_path for p in survivor.provenance} == {str(b)}
+
+
+def test_purging_removes_knowledge_with_no_other_evidence(pipeline, inbox, store):
+    pipeline.ingest_file(write(inbox, "spec.md", SPEC))
+    only = write(inbox, "only.md", "# Only\n\nAcme Corp capacity is 900 units per month.\n")
+    pipeline.ingest_file(only)
+
+    before = len(store.nodes)
+    result = pipeline.purge_source(str(only))
+    assert result["removed"]
+    assert len(store.nodes) < before
+    assert not any(
+        p.source_path == str(only)
+        for n in store.nodes.values() for p in n.provenance
+    )
+
+
 def test_chunk_diff_skips_unchanged_text():
     old = ["alpha text here", "beta text here"]
     from backend.core.ids import fingerprint
