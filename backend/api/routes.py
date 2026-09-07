@@ -443,6 +443,99 @@ async def ingest_upload(file: UploadFile = File(...)):
     return {"accepted": True, "path": str(target)}
 
 
+class ClusterRequest(BaseModel):
+    threshold: float = Field(
+        0.62, ge=0.05, le=1.0,
+        description="cosine distance ceiling; lower = tighter, more clusters",
+    )
+    min_size: int = Field(2, ge=2, le=50)
+    max_size: int = Field(25, ge=2, le=500)
+
+
+@router.post("/concepts/rebuild")
+def rebuild_concepts(req: ClusterRequest | None = None):
+    """Cluster the graph's embeddings and write the groups back as Concepts.
+
+    Deliberately on demand rather than after every ingest: clustering is a
+    global property of the whole graph, so it would be recomputed from scratch
+    on every document, and concept ids would churn under anyone reading them.
+    """
+    from backend.semantic.clustering import build_concepts
+
+    opts = req or ClusterRequest()
+    return build_concepts(
+        get_store(),
+        threshold=opts.threshold,
+        min_size=opts.min_size,
+        max_size=opts.max_size,
+    )
+
+
+@router.get("/concepts")
+def list_concepts():
+    """Current emergent topics and their members."""
+    from backend.semantic.clustering import concept_summary
+
+    concepts = concept_summary(get_store())
+    return {"count": len(concepts), "concepts": concepts}
+
+
+@router.delete("/concepts")
+def drop_concepts():
+    """Remove all derived concepts, leaving the asserted graph untouched."""
+    from backend.semantic.clustering import clear_concepts
+
+    return {"removed": clear_concepts(get_store())}
+
+
+@router.delete("/nodes/{node_id}")
+def forget_node(node_id: str):
+    """Erase one node, its relationships, its vector and its vault note.
+
+    Destructive and irreversible, which is why it is a separate verb from
+    removing a source file: deleting a file *retires* the knowledge it
+    supported, this *forgets* it.
+    """
+    from backend.pipeline import get_pipeline
+
+    result = get_pipeline().forget_node(node_id)
+    if not result["removed"]:
+        raise HTTPException(404, result["reason"])
+    return result
+
+
+@router.delete("/sources")
+def purge_source(path: str = Query(..., description="source path to erase")):
+    """Erase everything a source is solely responsible for.
+
+    Knowledge that another document also asserts survives; it just loses this
+    source's provenance. Use it to undo a bad ingest without resetting.
+    """
+    from backend.pipeline import get_pipeline
+
+    return get_pipeline().purge_source(path)
+
+
+@router.get("/sources")
+def list_sources():
+    """Every source the graph has ingested, and how much it is responsible for."""
+    store = get_store()
+    counts: dict[str, dict[str, Any]] = {}
+    for node in store.nodes.values():
+        for p in node.provenance:
+            if not p.source_path:
+                continue
+            row = counts.setdefault(
+                p.source_path,
+                {"path": p.source_path, "label": p.source_label, "nodes": 0,
+                 "sole_evidence": 0},
+            )
+            row["nodes"] += 1
+            if len({q.source_path for q in node.provenance}) == 1:
+                row["sole_evidence"] += 1
+    return {"sources": sorted(counts.values(), key=lambda r: -r["nodes"])}
+
+
 class EventRequest(BaseModel):
     event_type: str
     payload: dict[str, Any] = Field(default_factory=dict)

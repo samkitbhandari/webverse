@@ -13,12 +13,15 @@ export const TYPE_COLOR: Record<NodeType, string> = {
   Risk: "#ef476f",
   Action: "#94d82d",
   Evidence: "#8792a5",
+  // Derived, not asserted: muted violet keeps emergent topics visually
+  // subordinate to the beliefs that produced them.
+  Concept: "#9d8df1",
 };
 
 export const TYPE_GLYPH: Record<NodeType, string> = {
   Entity: "EN", Claim: "C", Observation: "OB", Assumption: "AS",
   Decision: "D", Requirement: "R", Constraint: "CN", Event: "EV",
-  Risk: "RK", Action: "AC", Evidence: "E",
+  Risk: "RK", Action: "AC", Evidence: "E", Concept: "CP",
 };
 
 /** Status drives the ring around a node, not its fill. */
@@ -62,6 +65,7 @@ export const EDGE_COLOR: Record<string, string> = {
   RELATED_TO: "#242c38",
   OWNED_BY: "#242c38",
   DERIVED_FROM: "#3d4859",
+  MEMBER_OF: "#3a3357",
 };
 
 export const GRADE_COLOR: Record<string, string> = {

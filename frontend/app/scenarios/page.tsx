@@ -37,7 +37,12 @@ const NEEDS_TARGET: InterventionType[] = ["SET_VALUE", "INVALIDATE", "ADD_DEPEND
 const NEEDS_SOURCE: InterventionType[] = ["ADD_DEPENDENCY", "REMOVE_DEPENDENCY"];
 const NEEDS_VALUE: InterventionType[] = ["SET_VALUE", "ASSERT"];
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+// A counter rather than Math.random(): these ids are created while the initial
+// state is built, which happens on the server AND again during hydration.
+// Random values differ between the two passes, which is exactly the class of
+// mismatch React warns about. A counter produces the same sequence in both.
+let _uid = 0;
+const uid = () => `iv${(_uid += 1)}`;
 
 const blankScenario = (n: number): ScenarioDraft => ({
   id: uid(),

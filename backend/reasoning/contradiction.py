@@ -251,6 +251,13 @@ def detect_for_node(
         if node.type in ASSERTIVE and other.type in ASSERTIVE:
             if not (node.status.is_live and other.status.is_live):
                 continue
+            # Two measurements are not a disagreement. An observation is a
+            # reading at a moment -- 68 degC in a chamber and 66 degC on a
+            # service day are both true, and calling that a contradiction turns
+            # an ordinary time series into a pile of false alarms. A *claim*
+            # asserts a persistent value, so claim-vs-measurement still counts.
+            if node.type is NodeType.OBSERVATION and other.type is NodeType.OBSERVATION:
+                continue
             conflicts, desc = _values_conflict(node.value, other.value)
             if not conflicts:
                 continue

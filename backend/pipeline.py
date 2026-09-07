@@ -170,6 +170,82 @@ class Pipeline:
         log.info("retired source %s: %d node(s) weakened", Path(path).name, result.nodes_updated)
         return result
 
+    # -----------------------------------------------------------------
+    # Forgetting
+    # -----------------------------------------------------------------
+    def forget_node(self, node_id: str) -> dict[str, Any]:
+        """Erase one node completely: graph, vectors and its vault note.
+
+        This is deliberately separate from :meth:`retire_source`. Retiring
+        says "the evidence went away, trust this less"; forgetting says "this
+        should never have been recorded". Only the second is destructive, and
+        only the second is something a human has to ask for explicitly.
+        """
+        node = self.store.get(node_id)
+        if node is None:
+            return {"removed": False, "reason": f"no node {node_id}"}
+
+        edges = len(self.store.incident(node_id))
+        label = node.label
+        self.store.remove_node(node_id)
+        self.index.delete_node(node_id)
+        self._remove_note(node)
+
+        bus.emit(
+            SemanticEventType.GRAPH_CHANGED,
+            {"reason": "node_forgotten", "id": node_id, "label": label,
+             "edges_removed": edges},
+        )
+        log.info("forgot %s (%s) and %d relationship(s)", node_id, label, edges)
+        return {"removed": True, "id": node_id, "label": label, "edges_removed": edges}
+
+    def purge_source(self, path: str) -> dict[str, Any]:
+        """Erase everything a source is solely responsible for.
+
+        A claim that two documents both assert must survive one of them being
+        purged -- it just loses that document's provenance and a little
+        confidence. Only knowledge with no remaining evidence is removed, which
+        is what makes this safe to run after a bad ingest.
+        """
+        removed: list[str] = []
+        kept: list[str] = []
+
+        for node in self.store.nodes_from_source(path):
+            others = [p for p in node.provenance if p.source_path != path]
+            if others:
+                self.store.update_node(
+                    node.id,
+                    provenance=others,
+                    confidence=max(node.confidence - 0.08, 0.05),
+                )
+                kept.append(node.id)
+            else:
+                self._remove_note(node)
+                self.store.remove_node(node.id)
+                self.index.delete_node(node.id)
+                removed.append(node.id)
+
+        self.index.delete_source(path)
+        bus.emit(
+            SemanticEventType.GRAPH_CHANGED,
+            {"reason": "source_purged", "path": path,
+             "removed": len(removed), "kept": len(kept)},
+            source_id=path,
+        )
+        log.info("purged %s: removed %d node(s), kept %d with other evidence",
+                 Path(path).name, len(removed), len(kept))
+        return {"path": path, "removed": removed, "kept_with_other_evidence": kept}
+
+    def _remove_note(self, node: KNode) -> None:
+        if not self.project_vault:
+            return
+        try:
+            from backend.vault.markdown_writer import note_path
+
+            note_path(node).unlink(missing_ok=True)
+        except OSError as exc:
+            log.warning("could not remove vault note for %s: %s", node.id, exc)
+
     def ingest_file(self, path: str | Path) -> IngestResult:
         started = utcnow()
         path = Path(path)

@@ -18,6 +18,7 @@ const GROUPS: { label: string; types: string }[] = [
   { label: "Events", types: "Event" },
   { label: "Risks", types: "Risk,Action" },
   { label: "Sources", types: "Evidence" },
+  { label: "Topics", types: "Concept" },
 ];
 
 export default function KnowledgePage() {

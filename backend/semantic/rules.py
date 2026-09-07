@@ -63,10 +63,63 @@ _ASSUMPTION_CUES = re.compile(
     r"\b(assum\w+|presum\w+|expected to|anticipat\w+|baseline of)\b", re.I
 )
 
+#: "X is now deprecated" asserts a value just as firmly as "X is 60 degC".
+#: Without this the extractor emits nothing for polarity statements, and
+#: SEMANTIC contradictions -- one of the four kinds the system detects -- are
+#: undemonstrable unless an LLM is configured.
+_POLARITY_RE = re.compile(
+    r"\b(?:is|are|was|were|remains?|becomes?|has been|have been)\s+"
+    r"(?:now\s+|being\s+)?"
+    r"(?P<neg>no longer\s+|not\s+|never\s+)?"
+    r"(?:now\s+|being\s+)?"
+    r"(?P<state>deprecated|withdrawn|obsolete|discontinued|unsupported|"
+    r"non-compliant|noncompliant|decertified|revoked|suspended|unavailable|"
+    r"supported|certified|approved|compliant|active|operational|available)\b",
+    re.I,
+)
+
+#: Negation inverts the assertion, so "no longer compliant" must land on the
+#: same value as "non-compliant" -- otherwise the two phrasings would not be
+#: recognised as saying the same thing, and a document saying a thing has
+#: lapsed would be recorded as saying it holds.
+_POLARITY_OPPOSITE: dict[str, str] = {
+    "supported": "unsupported", "unsupported": "supported",
+    "certified": "decertified", "decertified": "certified",
+    "approved": "revoked", "revoked": "approved",
+    "compliant": "non-compliant", "non-compliant": "compliant",
+    "noncompliant": "compliant",
+    "active": "suspended", "suspended": "active",
+    "operational": "unavailable", "available": "unavailable",
+    "unavailable": "available",
+    "deprecated": "supported", "withdrawn": "available",
+    "obsolete": "supported", "discontinued": "supported",
+}
+
+#: Which property each state is asserting something about. Two documents must
+#: land on the same predicate for their disagreement to be detectable at all.
+_POLARITY_PREDICATE: dict[str, str] = {
+    "deprecated": "support status", "withdrawn": "support status",
+    "obsolete": "support status", "discontinued": "support status",
+    "unsupported": "support status", "supported": "support status",
+    "decertified": "certification status", "revoked": "certification status",
+    "suspended": "certification status", "certified": "certification status",
+    "approved": "certification status",
+    "non-compliant": "compliance status", "noncompliant": "compliance status",
+    "compliant": "compliance status",
+    "unavailable": "availability status", "available": "availability status",
+    "active": "availability status", "operational": "availability status",
+}
+
 #: Surface forms -> the canonical predicate two documents must agree on.
 PREDICATE_SYNONYMS: list[tuple[re.Pattern[str], str]] = [
+    # Ambient is checked first: it is a property of the environment, not of the
+    # equipment. Folding it into "max operating temperature" made a 41 degC
+    # weather reading contradict a 68 degC pack measurement.
+    (re.compile(r"ambient temperature|outside temperature|air temperature", re.I),
+     "ambient temperature"),
     (re.compile(r"operating temperature|temperature limit|temperature threshold|"
-                r"thermal limit|max\w* temperature|cell temperature", re.I),
+                r"thermal limit|max\w* temperature|cell temperature|"
+                r"pack temperature", re.I),
      "max operating temperature"),
     (re.compile(r"charg\w+ (?:time|duration)", re.I), "charging time"),
     (re.compile(r"charg\w+ (?:power|rate)", re.I), "charging power"),
@@ -87,6 +140,16 @@ PREDICATE_SYNONYMS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"fleet size|number of vehicles|vehicle count", re.I), "fleet size"),
 ]
 
+#: All-caps tokens that the entity pattern would otherwise happily collect.
+#: "3120 INR" made "INR" an entity, and then discourse continuity attributed
+#: the next sentence's value to it -- producing claims like "INR cost = 2,740".
+_UNIT_TOKENS = {
+    "INR", "USD", "EUR", "GBP", "JPY", "AED", "CNY",
+    "TPS", "RPS", "QPS", "KW", "MW", "KWH", "MWH", "WH", "AH", "VDC", "VAC",
+    "MS", "KM", "CM", "MM", "KG", "HZ", "KHZ", "MHZ", "GHZ", "PSI", "RPM",
+    "AC", "DC", "OK", "NA", "TBD", "TBC", "ETA", "FYI",
+}
+
 _STOPWORD_STARTS = {
     "The", "This", "That", "These", "Those", "A", "An", "It", "We", "They",
     "However", "Therefore", "Because", "Since", "If", "When", "While", "As",
@@ -102,8 +165,10 @@ _VALUE_RE = re.compile(
     r"(?P<cur>[₹$€])?\s*"
     r"(?P<num>\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
     r"(?:\s*(?P<mag>lakhs?|lac|crores?|million|billion|thousand|mn|bn|k)\b)?"
-    r"(?:\s*(?P<unit>%|°\s?[CF]|deg\s?[CF]|degrees? (?:celsius|centigrade|fahrenheit)|"
-    r"[CF]\b|kWh|kW|MWh|MW|Wh|ms\b|msec\b|secs?\b|seconds?\b|minutes?\b|mins?\b|"
+    r"(?:\s*(?P<unit>%|percent\b|pct\b|"
+    r"°\s?[CF]|deg\s?[CF]|degrees? (?:celsius|centigrade|fahrenheit)|[CF]\b|"
+    r"INR\b|USD\b|EUR\b|GBP\b|JPY\b|rupees?\b|dollars?\b|"      # written currencies
+    r"kWh|kW|MWh|MW|Wh|ms\b|msec\b|secs?\b|seconds?\b|minutes?\b|mins?\b|"
     r"hours?\b|hrs?\b|days?\b|weeks?\b|months?\b|km\b|cm\b|mm\b|kg\b|tonnes?\b|"
     r"TPS\b|rps\b|qps\b|V\b|Ah\b|"
     r"units?(?:\s*(?:/|per)\s*\w+)?|vehicles?|users?|cells?|stations?|pieces?))?",
@@ -195,6 +260,51 @@ def _fallback_predicate(left: str) -> str:
     return " ".join(words[-3:]) if words else "value"
 
 
+_DATEISH = re.compile(
+    r"^(quarter|q[1-4]|h[12]|fy|week|month|year|phase)\s*\d*$|^\d{4}$", re.I
+)
+
+
+def _distinctive_reference(text: str, known: Iterable[str]) -> str | None:
+    """Resolve a shorthand mention like "pack temperature" to its full entity.
+
+    Reports rarely repeat the full name: a document introduces "Battery Pack
+    BP-7" and then writes "measured pack temperature". Without this, those
+    sentences carry no entity at all and the value gets attributed to whichever
+    proper noun appeared most recently -- which is how a corridor ended up
+    owning a battery's temperature.
+
+    A token only resolves when it belongs to exactly one known entity, so an
+    ambiguous word like "fleet" (Phase 1 and Phase 2 both contain it) is left
+    alone rather than guessed at.
+    """
+    words = set(re.findall(r"[a-z][a-z0-9-]{2,}", text.lower()))
+    if not words:
+        return None
+
+    owners: dict[str, set[str]] = {}
+    for name in known:
+        for token in re.findall(r"[a-z][a-z0-9-]{2,}", name.lower()):
+            if token in _STOP_TOKENS:
+                continue
+            owners.setdefault(token, set()).add(name)
+
+    for token in words:
+        candidates = owners.get(token)
+        if candidates and len(candidates) == 1:
+            return next(iter(candidates))
+    return None
+
+
+#: Words too generic to identify an entity by themselves.
+_STOP_TOKENS = {
+    "the", "and", "of", "ltd", "limited", "inc", "corp", "systems", "system",
+    "energy", "cells", "cell", "north", "south", "east", "west", "phase",
+    "deployment", "authority", "programme", "program", "urban", "mobility",
+    "transit", "hub", "type", "thermal", "architecture", "battery",
+}
+
+
 def find_entities(text: str, known: Iterable[str] = ()) -> list[str]:
     """Proper-noun-ish spans, plus any known entity mentioned verbatim."""
     found: list[str] = []
@@ -212,6 +322,10 @@ def find_entities(text: str, known: Iterable[str] = ()) -> list[str]:
         first = cand.split()[0]
         if first in _STOPWORD_STARTS and len(cand.split()) < 3:
             continue
+        if cand.upper() in _UNIT_TOKENS:
+            continue
+        if _DATEISH.match(cand):
+            continue          # "Quarter 2" is a reporting period, not a thing
         if len(cand) < 3 or cand.lower() in seen:
             continue
         seen.add(cand.lower())
@@ -305,6 +419,11 @@ def extract(
 
         subject = _pick_subject(sentence, known)
         inferred_subject = False
+        if subject is None:
+            # A shorthand mention ("pack temperature") beats carrying whatever
+            # proper noun happened to appear last -- it is evidence from this
+            # sentence, not from a neighbouring one.
+            subject = _distinctive_reference(sentence, known)
         if subject:
             current_subject, carry = subject, 0
         elif current_subject and carry < CARRY_LIMIT:
@@ -371,6 +490,9 @@ def extract(
                 r"(?:reduced|lowered|raised|increased|changed|revised)\s+from\s+"
                 r"(?P<old>[^,;]+?)\s+to\s+(?P<new>[^,;.]+)", sentence, re.I
             )
+            # An announcement is also an assertion: "X was withdrawn" says both
+            # that something happened and that X is now withdrawn.
+            _emit_polarity(ex, sentence, subject, is_observation, confidence_penalty)
             if pair and subject:
                 newv = _value_in(pair.group("new"))
                 if newv:
@@ -420,6 +542,10 @@ def extract(
             )
             continue
 
+        # --- polarity claim ("X is now deprecated") --------------------
+        if _emit_polarity(ex, sentence, subject, is_observation, confidence_penalty):
+            continue
+
         # --- relationship cues ----------------------------------------
         rel = _relationship(sentence, known)
         if rel:
@@ -430,6 +556,41 @@ def extract(
         for name in entity_names.values()
     ]
     return ex
+
+
+def _emit_polarity(
+    ex: Extraction, sentence: str, subject: str | None,
+    is_observation: bool, penalty: float,
+) -> bool:
+    """Record "X is now deprecated" as a claim. Returns whether one was added.
+
+    Called from the event branch as well as standalone, because words like
+    "deprecated" and "withdrawn" are event cues *and* state assertions. A
+    regulation notice announcing a withdrawal is both an event and the claim
+    that the thing is now withdrawn; emitting only the event loses the value
+    that a later document could contradict.
+    """
+    if not subject:
+        return False
+    match = _POLARITY_RE.search(sentence)
+    if not match:
+        return False
+    state = match.group("state").lower()
+    predicate = _POLARITY_PREDICATE.get(state, "status")
+    if match.group("neg"):
+        # The predicate is a property of the word as written ("compliant" ->
+        # compliance status), so it is resolved before the value is flipped.
+        state = _POLARITY_OPPOSITE.get(state, state)
+    ex.claims.append(
+        ExtractedClaim(
+            text=sentence, subject=subject,
+            predicate=predicate,
+            value=state, unit=None,
+            confidence=(0.66 if is_observation else 0.62) - penalty,
+            kind="Observation" if is_observation else "Claim",
+        )
+    )
+    return True
 
 
 def _after_because(sentence: str) -> str:
